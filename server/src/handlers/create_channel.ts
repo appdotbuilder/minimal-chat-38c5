@@ -1,16 +1,45 @@
+import { db } from '../db';
+import { channelsTable, channelMembersTable, usersTable } from '../db/schema';
 import { type CreateChannelInput, type Channel } from '../schema';
+import { eq } from 'drizzle-orm';
 
-export async function createChannel(input: CreateChannelInput): Promise<Channel> {
-  // This is a placeholder declaration! Real code should be implemented here.
-  // The goal of this handler is creating a new channel and automatically adding
-  // the creator as an owner member. Should handle both public and private channels.
-  return Promise.resolve({
-    id: '00000000-0000-0000-0000-000000000000',
-    name: input.name,
-    description: input.description || null,
-    type: input.type,
-    created_by: input.created_by,
-    created_at: new Date(),
-    updated_at: new Date(),
-  } as Channel);
-}
+export const createChannel = async (input: CreateChannelInput): Promise<Channel> => {
+  try {
+    // Verify that the creator user exists
+    const creator = await db.select()
+      .from(usersTable)
+      .where(eq(usersTable.id, input.created_by))
+      .execute();
+    
+    if (creator.length === 0) {
+      throw new Error(`User with id ${input.created_by} not found`);
+    }
+
+    // Create the channel
+    const channelResult = await db.insert(channelsTable)
+      .values({
+        name: input.name,
+        description: input.description || null,
+        type: input.type,
+        created_by: input.created_by
+      })
+      .returning()
+      .execute();
+
+    const channel = channelResult[0];
+
+    // Automatically add the creator as an owner member
+    await db.insert(channelMembersTable)
+      .values({
+        channel_id: channel.id,
+        user_id: input.created_by,
+        role: 'owner'
+      })
+      .execute();
+
+    return channel;
+  } catch (error) {
+    console.error('Channel creation failed:', error);
+    throw error;
+  }
+};

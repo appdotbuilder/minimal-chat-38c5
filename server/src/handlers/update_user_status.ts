@@ -1,19 +1,28 @@
+import { db } from '../db';
+import { usersTable } from '../db/schema';
 import { type UpdateUserStatusInput, type User } from '../schema';
+import { eq } from 'drizzle-orm';
 
-export async function updateUserStatus(input: UpdateUserStatusInput): Promise<User> {
-  // This is a placeholder declaration! Real code should be implemented here.
-  // The goal of this handler is updating user's online status and last_seen timestamp.
-  // This is critical for real-time presence features.
-  return Promise.resolve({
-    id: input.user_id,
-    email: 'user@example.com',
-    display_name: 'User',
-    avatar_url: null,
-    provider: 'google',
-    provider_id: '123',
-    status: input.status,
-    last_seen: new Date(),
-    created_at: new Date(),
-    updated_at: new Date(),
-  } as User);
-}
+export const updateUserStatus = async (input: UpdateUserStatusInput): Promise<User> => {
+  try {
+    // Update user status and last_seen timestamp
+    const result = await db.update(usersTable)
+      .set({
+        status: input.status,
+        last_seen: new Date(), // Always update last_seen when status changes
+        updated_at: new Date(), // Update the general timestamp
+      })
+      .where(eq(usersTable.id, input.user_id))
+      .returning()
+      .execute();
+
+    if (result.length === 0) {
+      throw new Error(`User with id ${input.user_id} not found`);
+    }
+
+    return result[0];
+  } catch (error) {
+    console.error('User status update failed:', error);
+    throw error;
+  }
+};
